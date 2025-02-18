@@ -1,7 +1,7 @@
 # cf7-field-validator
 rudimentory plugin for cf7 that adds a custom validation in the ui
 
-[the image](./assets/admin-menu.png)
+![image.png](../admin-menu.png)
 
 ## how to install?
 download the cf7-field-validator.php, put it in a directory with the same name, zip and upload.
