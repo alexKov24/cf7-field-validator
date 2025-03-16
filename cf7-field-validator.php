@@ -98,6 +98,8 @@ class CF7_Field_Validator
                             <select name="validator_rules[${ruleCount}][operator]">
                                 <option value="equals">Equals</option>
                                 <option value="not_equals">Not Equals</option>
+                                <option value="contains">Contains</option>
+                                <option value="not_contains">Not Contains</option>
                             </select>
                         </td>
                         <td>
@@ -140,6 +142,8 @@ class CF7_Field_Validator
                 <select name="validator_rules[<?php echo $index; ?>][operator]">
                     <option value="equals" <?php selected(($rule['operator'] ?? ''), 'equals'); ?>>Equals</option>
                     <option value="not_equals" <?php selected(($rule['operator'] ?? ''), 'not_equals'); ?>>Not Equals</option>
+                    <option value="contains" <?php selected(($rule['operator'] ?? ''), 'contains'); ?>>Contains</option>
+                    <option value="not_contains" <?php selected(($rule['operator'] ?? ''), 'not_contains'); ?>>Not Contains</option>
                 </select>
             </td>
             <td>
@@ -220,6 +224,10 @@ class CF7_Field_Validator
                     $is_invalid = ($posted_value !== $rule['value']);
                 } elseif ($rule['operator'] === 'not_equals') {
                     $is_invalid = ($posted_value === $rule['value']);
+                } elseif ($rule['operator'] === 'contains') {
+                    $is_invalid = (strpos($posted_value, $rule['value']) === false);
+                } elseif ($rule['operator'] === 'not_contains') {
+                    $is_invalid = (strpos($posted_value, $rule['value']) !== false);
                 }
 
                 if ($is_invalid) {
@@ -330,6 +338,8 @@ class CF7_Field_Validator
                             <select name="<?php echo $this->option_name; ?>[${globalRuleCount}][operator]">
                                 <option value="equals">Equals</option>
                                 <option value="not_equals">Not Equals</option>
+                                <option value="contains">Contains</option>
+                                <option value="not_contains">Not Contains</option>
                             </select>
                         </td>
                         <td>
@@ -372,6 +382,8 @@ class CF7_Field_Validator
                 <select name="<?php echo $this->option_name; ?>[<?php echo $index; ?>][operator]">
                     <option value="equals" <?php selected(($rule['operator'] ?? ''), 'equals'); ?>>Equals</option>
                     <option value="not_equals" <?php selected(($rule['operator'] ?? ''), 'not_equals'); ?>>Not Equals</option>
+                    <option value="contains" <?php selected(($rule['operator'] ?? ''), 'contains'); ?>>Contains</option>
+                    <option value="not_contains" <?php selected(($rule['operator'] ?? ''), 'not_contains'); ?>>Not Contains</option>
                 </select>
             </td>
             <td>
