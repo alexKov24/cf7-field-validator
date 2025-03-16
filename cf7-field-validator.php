@@ -81,6 +81,7 @@ class CF7_Field_Validator
                     ?>
                 </tbody>
             </table>
+            <p class="description">For multiple values, use comma-separated list (e.g., "red,green,blue"). The condition will be matched if ANY value in the list is matched.</p>
             <button type="button" class="button" id="add-rule">Add New Rule</button>
         </fieldset>
 
@@ -103,7 +104,7 @@ class CF7_Field_Validator
                             </select>
                         </td>
                         <td>
-                            <input type="text" name="validator_rules[${ruleCount}][value]" placeholder="Expected value" />
+                            <input type="text" name="validator_rules[${ruleCount}][value]" placeholder="Value or comma-separated list (red,green,blue)" />
                         </td>
                         <td>
                             <input type="text" name="validator_rules[${ruleCount}][message]" placeholder="Error message" />
@@ -150,7 +151,7 @@ class CF7_Field_Validator
                 <input type="text"
                     name="validator_rules[<?php echo $index; ?>][value]"
                     value="<?php echo esc_attr($rule['value'] ?? ''); ?>"
-                    placeholder="Expected value" />
+                    placeholder="Value or comma-separated list (red,green,blue)" />
             </td>
             <td>
                 <input type="text"
@@ -220,14 +221,50 @@ class CF7_Field_Validator
                 }
 
                 $is_invalid = false;
+                
+                // Convert rule value to array if it contains commas
+                $rule_values = strpos($rule['value'], ',') !== false 
+                    ? array_map('trim', explode(',', $rule['value'])) 
+                    : [$rule['value']];
+                
                 if ($rule['operator'] === 'equals') {
-                    $is_invalid = ($posted_value !== $rule['value']);
+                    // Check if posted value equals ANY of the values in the list
+                    $matches_any = false;
+                    foreach ($rule_values as $value) {
+                        if ($posted_value === $value) {
+                            $matches_any = true;
+                            break;
+                        }
+                    }
+                    $is_invalid = !$matches_any;
                 } elseif ($rule['operator'] === 'not_equals') {
-                    $is_invalid = ($posted_value === $rule['value']);
+                    // Check if posted value equals ANY of the values in the list
+                    // If it matches any, validation fails
+                    foreach ($rule_values as $value) {
+                        if ($posted_value === $value) {
+                            $is_invalid = true;
+                            break;
+                        }
+                    }
                 } elseif ($rule['operator'] === 'contains') {
-                    $is_invalid = (strpos($posted_value, $rule['value']) === false);
+                    // Check if posted value contains ANY of the values in the list
+                    $contains_any = false;
+                    foreach ($rule_values as $value) {
+                        if (strpos($posted_value, $value) !== false) {
+                            $contains_any = true;
+                            break;
+                        }
+                    }
+                    $is_invalid = !$contains_any;
                 } elseif ($rule['operator'] === 'not_contains') {
-                    $is_invalid = (strpos($posted_value, $rule['value']) !== false);
+                    // Check if posted value contains ANY of the values in the list
+                    // If it contains any, validation fails
+                    foreach ($rule_values as $value) {
+                        if (strpos($posted_value, $value) !== false) {
+                            $is_invalid = true;
+                            break;
+                        }
+                    }
                 }
 
                 if ($is_invalid) {
@@ -317,7 +354,8 @@ class CF7_Field_Validator
                             ?>
                         </tbody>
                     </table>
-                    <button type="button" class="button" id="add-global-rule">Add New Rule</button>
+                    <p class="description">For "In List" and "Not In List" operators, use comma-separated values (e.g., "red,green,blue").</p>
+            <button type="button" class="button" id="add-global-rule">Add New Rule</button>
                 </fieldset>
                 
                 <?php submit_button('Save Global Rules'); ?>
@@ -343,7 +381,7 @@ class CF7_Field_Validator
                             </select>
                         </td>
                         <td>
-                            <input type="text" name="<?php echo $this->option_name; ?>[${globalRuleCount}][value]" placeholder="Expected value" />
+                            <input type="text" name="<?php echo $this->option_name; ?>[${globalRuleCount}][value]" placeholder="Value or comma-separated list (red,green,blue)" />
                         </td>
                         <td>
                             <input type="text" name="<?php echo $this->option_name; ?>[${globalRuleCount}][message]" placeholder="Error message" />
@@ -390,7 +428,7 @@ class CF7_Field_Validator
                 <input type="text"
                     name="<?php echo $this->option_name; ?>[<?php echo $index; ?>][value]"
                     value="<?php echo esc_attr($rule['value'] ?? ''); ?>"
-                    placeholder="Expected value" />
+                    placeholder="Value or comma-separated list (red,green,blue)" />
             </td>
             <td>
                 <input type="text"
