@@ -30,7 +30,7 @@ class CF7_Field_Validator
 ?>
         <h2>Field Validation Rules</h2>
         <fieldset>
-            <legend>Define your validation rules</legend>
+            <legend>Will allow submission only if:</legend>
             <table class="form-table">
                 <tbody id="validator-rules">
                     <?php
