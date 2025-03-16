@@ -1,8 +1,13 @@
 <?php
 /*
 Plugin Name: CF7 Field Validator
+Plugin URI: https://github.com/alexKov24/cf7-field-validator/tree/main
 Description: Custom validation tab in CF7 editor
-Version: 1.0
+Version: 1.0.1
+Author: Alex Kovalev
+Author URI: https://webchad.tech
+License: GPL v2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 */
 
 class CF7_Field_Validator
