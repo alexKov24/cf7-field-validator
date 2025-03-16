@@ -3,7 +3,7 @@
 Plugin Name: CF7 Field Validator
 Plugin URI: https://github.com/alexKov24/cf7-field-validator/tree/main
 Description: Custom validation tab in CF7 editor with global settings support
-Version: 1.0.2
+Version: 1.0.3
 Author: Alex Kovalev
 Author URI: https://webchad.tech
 License: GPL v2 or later
@@ -15,6 +15,9 @@ class CF7_Field_Validator
 {
     private $option_name = 'cf7_field_validator_global_rules';
 
+    /**
+     * Modify the constructor to include settings link
+     */
     public function __construct()
     {
         // Form editor tabs
@@ -29,6 +32,31 @@ class CF7_Field_Validator
         
         // Register settings
         add_action('admin_init', [$this, 'register_settings']);
+        
+        // Optionally add debug output
+        add_action('wpcf7_before_send_mail', [$this, 'debug_validation_messages'], 10, 3);
+        
+        // Add settings link to plugins page
+        add_filter('plugin_action_links_' . plugin_basename(__FILE__), [$this, 'add_settings_link']);
+    }
+    
+    /**
+     * Add settings link to plugin page
+     */
+    public function add_settings_link($links)
+    {
+        $settings_link = '<a href="' . admin_url('admin.php?page=cf7-validator-settings') . '">Settings</a>';
+        array_unshift($links, $settings_link);
+        return $links;
+    }
+    
+    /**
+     * Debug validation messages (optional function for troubleshooting)
+     */
+    public function debug_validation_messages($contact_form, &$abort, $submission)
+    {
+        // Uncomment the line below for debugging
+        // error_log('CF7 Field Validator: Validation messages - ' . print_r($submission->get_invalid_fields(), true));
     }
 
     /**
@@ -271,7 +299,10 @@ class CF7_Field_Validator
                     // Find the corresponding tag
                     foreach ($tags as $tag) {
                         if ($tag->name === $field) {
-                            $result->invalidate($tag, $rule['message'] ?: "Invalid value for $field");
+                            $error_message = !empty($rule['message']) 
+                                ? $rule['message'] 
+                                : sprintf("Invalid value for %s", $field);
+                            $result->invalidate($tag, $error_message);
                             break;
                         }
                     }
