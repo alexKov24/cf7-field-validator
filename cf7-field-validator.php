@@ -33,24 +33,27 @@ class CF7_Field_Validator
         // Form editor tabs
         add_filter('wpcf7_editor_panels', [$this, 'add_validator_tab']);
         add_action('wpcf7_save_contact_form', [$this, 'save_validator_settings']);
-        
+
         // Validation
         add_filter('wpcf7_validate', [$this, 'validate_fields'], 10, 2);
-        
+
         // Admin menu for global settings
         add_action('admin_menu', [$this, 'add_settings_page']);
-        
+
         // Register settings
         add_action('admin_init', [$this, 'register_settings']);
-        
+
         // Optionally add debug output
         add_action('wpcf7_before_send_mail', [$this, 'debug_validation_messages'], 10, 3);
-        
+
         // Add settings link to plugins page
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [$this, 'add_settings_link']);
 
         // Handle import/export actions
         add_action('admin_init', [$this, 'handle_import_export']);
+
+        // Enqueue admin scripts
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
     }
     
     /**
@@ -61,6 +64,23 @@ class CF7_Field_Validator
         $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=cf7-validator-settings')) . '">Settings</a>';
         array_unshift($links, $settings_link);
         return $links;
+    }
+
+    /**
+     * Enqueue admin scripts
+     */
+    public function enqueue_admin_scripts($hook)
+    {
+        // Only load on CF7 form editor and our settings page
+        if ($hook === 'toplevel_page_wpcf7' || $hook === 'contact_page_cf7-validator-settings') {
+            wp_enqueue_script(
+                'cf7-validator-admin',
+                plugin_dir_url(__FILE__) . 'assets/cf7-validator-admin.js',
+                ['jquery'],
+                '1.0.3',
+                true
+            );
+        }
     }
     
     /**
@@ -125,45 +145,6 @@ class CF7_Field_Validator
             <p class="description">For multiple values, use comma-separated list (e.g., "red,green,blue"). The condition will be matched if ANY value in the list is matched.</p>
             <button type="button" class="button" id="add-rule">Add New Rule</button>
         </fieldset>
-
-        <script>
-            jQuery(document).ready(function($) {
-                let ruleCount = $('#validator-rules tr').length;
-
-                $('#add-rule').on('click', function() {
-                    const template = `
-                    <tr>
-                        <td>
-                            <input type="text" name="validator_rules[${ruleCount}][field]" placeholder="Field name" />
-                        </td>
-                        <td>
-                            <select name="validator_rules[${ruleCount}][operator]">
-                                <option value="equals">Equals</option>
-                                <option value="not_equals">Not Equals</option>
-                                <option value="contains">Contains</option>
-                                <option value="not_contains">Not Contains</option>
-                            </select>
-                        </td>
-                        <td>
-                            <input type="text" name="validator_rules[${ruleCount}][value]" placeholder="Value or comma-separated list (red,green,blue)" />
-                        </td>
-                        <td>
-                            <input type="text" name="validator_rules[${ruleCount}][message]" placeholder="Error message" />
-                        </td>
-                        <td>
-                            <button type="button" class="button remove-rule">Remove</button>
-                        </td>
-                    </tr>
-                `;
-                    $('#validator-rules').append(template);
-                    ruleCount++;
-                });
-
-                $(document).on('click', '.remove-rule', function() {
-                    $(this).closest('tr').remove();
-                });
-            });
-        </script>
     <?php
     }
 
@@ -552,7 +533,7 @@ class CF7_Field_Validator
                 <fieldset>
                     <legend>Will allow submission only if:</legend>
                     <table class="form-table">
-                        <tbody id="global-validator-rules">
+                        <tbody id="global-validator-rules" data-option-name="<?php echo esc_attr($this->option_name); ?>">
                             <?php
                             if ($global_rules) {
                                 foreach ($global_rules as $index => $rule) {
@@ -567,49 +548,10 @@ class CF7_Field_Validator
                     <p class="description">For "In List" and "Not In List" operators, use comma-separated values (e.g., "red,green,blue").</p>
             <button type="button" class="button" id="add-global-rule">Add New Rule</button>
                 </fieldset>
-                
+
                 <?php submit_button('Save Global Rules'); ?>
             </form>
         </div>
-
-        <script>
-            jQuery(document).ready(function($) {
-                let globalRuleCount = $('#global-validator-rules tr').length;
-
-                $('#add-global-rule').on('click', function() {
-                    const template = `
-                    <tr>
-                        <td>
-                            <input type="text" name="<?php echo esc_attr($this->option_name); ?>[${globalRuleCount}][field]" placeholder="Field name" />
-                        </td>
-                        <td>
-                            <select name="<?php echo esc_attr($this->option_name); ?>[${globalRuleCount}][operator]">
-                                <option value="equals">Equals</option>
-                                <option value="not_equals">Not Equals</option>
-                                <option value="contains">Contains</option>
-                                <option value="not_contains">Not Contains</option>
-                            </select>
-                        </td>
-                        <td>
-                            <input type="text" name="<?php echo esc_attr($this->option_name); ?>[${globalRuleCount}][value]" placeholder="Value or comma-separated list (red,green,blue)" />
-                        </td>
-                        <td>
-                            <input type="text" name="<?php echo esc_attr($this->option_name); ?>[${globalRuleCount}][message]" placeholder="Error message" />
-                        </td>
-                        <td>
-                            <button type="button" class="button remove-global-rule">Remove</button>
-                        </td>
-                    </tr>
-                `;
-                    $('#global-validator-rules').append(template);
-                    globalRuleCount++;
-                });
-
-                $(document).on('click', '.remove-global-rule', function() {
-                    $(this).closest('tr').remove();
-                });
-            });
-        </script>
     <?php
     }
     
