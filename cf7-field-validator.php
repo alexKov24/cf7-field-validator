@@ -3,7 +3,7 @@
 Plugin Name: CF7 Field Validator
 Plugin URI: https://github.com/alexKov24/cf7-field-validator/tree/main
 Description: Custom validation tab in CF7 editor with global settings support
-Version: 1.0.3
+Version: 1.1.0
 Author: Alex Kovalev
 Author URI: https://webchad.tech
 License: GPL v2 or later
