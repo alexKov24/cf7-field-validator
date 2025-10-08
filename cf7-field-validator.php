@@ -11,6 +11,16 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: cf7-field-validator
 */
 
+// Exit if accessed directly
+if (!defined('ABSPATH')) {
+    exit;
+}
+
+// Prevent direct file access
+if (!defined('ABSPATH')) {
+    exit;
+}
+
 class CF7_Field_Validator
 {
     private $option_name = 'cf7_field_validator_global_rules';
@@ -38,6 +48,9 @@ class CF7_Field_Validator
         
         // Add settings link to plugins page
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), [$this, 'add_settings_link']);
+
+        // Handle import/export actions
+        add_action('admin_init', [$this, 'handle_import_export']);
     }
     
     /**
@@ -45,7 +58,7 @@ class CF7_Field_Validator
      */
     public function add_settings_link($links)
     {
-        $settings_link = '<a href="' . admin_url('admin.php?page=cf7-validator-settings') . '">Settings</a>';
+        $settings_link = '<a href="' . esc_url(admin_url('admin.php?page=cf7-validator-settings')) . '">Settings</a>';
         array_unshift($links, $settings_link);
         return $links;
     }
@@ -90,7 +103,7 @@ class CF7_Field_Validator
                 <input type="checkbox" name="use_global_validator_rules" value="yes" <?php checked($use_global_rules, 'yes'); ?> />
                 Apply global validation rules to this form
             </label>
-            <p class="description">If checked, this form will also use the <a href="<?php echo admin_url('admin.php?page=cf7-validator-settings'); ?>">global validation rules</a> in addition to form-specific rules below.</p>
+            <p class="description">If checked, this form will also use the <a href="<?php echo esc_url(admin_url('admin.php?page=cf7-validator-settings')); ?>">global validation rules</a> in addition to form-specific rules below.</p>
         </div>
         
         <h3>Form-Specific Rules</h3>
@@ -199,14 +212,29 @@ class CF7_Field_Validator
      */
     public function save_validator_settings($contact_form)
     {
-        // Save form-specific rules
-        if (isset($_POST['validator_rules'])) {
-            $rules = array_values(array_filter($_POST['validator_rules'], function ($rule) {
-                return !empty($rule['field']) && !empty($rule['value']);
-            }));
-            update_post_meta($contact_form->id(), 'validator_rules', $rules);
+        // Check user capability
+        if (!current_user_can('wpcf7_edit_contact_form', $contact_form->id())) {
+            return;
         }
-        
+
+        // Save form-specific rules with sanitization
+        if (isset($_POST['validator_rules'])) {
+            $sanitized_rules = array();
+            foreach ($_POST['validator_rules'] as $rule) {
+                if (!empty($rule['field']) && !empty($rule['value'])) {
+                    $sanitized_rules[] = array(
+                        'field' => sanitize_text_field($rule['field']),
+                        'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains'])
+                            ? $rule['operator']
+                            : 'equals',
+                        'value' => sanitize_text_field($rule['value']),
+                        'message' => sanitize_text_field($rule['message'] ?? '')
+                    );
+                }
+            }
+            update_post_meta($contact_form->id(), 'validator_rules', $sanitized_rules);
+        }
+
         // Save global rules toggle
         $use_global_rules = isset($_POST['use_global_validator_rules']) ? 'yes' : 'no';
         update_post_meta($contact_form->id(), 'use_global_validator_rules', $use_global_rules);
@@ -299,9 +327,9 @@ class CF7_Field_Validator
                     // Find the corresponding tag
                     foreach ($tags as $tag) {
                         if ($tag->name === $field) {
-                            $error_message = !empty($rule['message']) 
-                                ? $rule['message'] 
-                                : sprintf("Invalid value for %s", $field);
+                            $error_message = !empty($rule['message'])
+                                ? esc_html($rule['message'])
+                                : sprintf("Invalid value for %s", esc_html($field));
                             $result->invalidate($tag, $error_message);
                             break;
                         }
@@ -348,12 +376,127 @@ class CF7_Field_Validator
         if (!is_array($input)) {
             return [];
         }
-        
-        return array_values(array_filter($input, function ($rule) {
-            return !empty($rule['field']) && !empty($rule['value']);
-        }));
+
+        $sanitized = [];
+        foreach ($input as $rule) {
+            if (!empty($rule['field']) && !empty($rule['value'])) {
+                $sanitized[] = [
+                    'field' => sanitize_text_field($rule['field']),
+                    'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains'])
+                        ? $rule['operator']
+                        : 'equals',
+                    'value' => sanitize_text_field($rule['value']),
+                    'message' => sanitize_text_field($rule['message'] ?? '')
+                ];
+            }
+        }
+
+        return $sanitized;
     }
     
+    /**
+     * Handle import/export actions
+     */
+    public function handle_import_export()
+    {
+        // Handle export
+        if (isset($_POST['cf7_validator_export']) && check_admin_referer('cf7_validator_export_nonce')) {
+            // Check user capability
+            if (!current_user_can('manage_options')) {
+                wp_die(__('You do not have sufficient permissions to access this page.'));
+            }
+
+            $settings = [
+                'global_rules' => get_option($this->option_name, []),
+                'version' => '1.0',
+                'export_date' => current_time('mysql')
+            ];
+
+            $filename = 'cf7-validator-settings-' . date('Y-m-d') . '.json';
+
+            header('Content-Type: application/json');
+            header('Content-Disposition: attachment; filename="' . sanitize_file_name($filename) . '"');
+            echo wp_json_encode($settings, JSON_PRETTY_PRINT);
+            exit;
+        }
+
+        // Handle import
+        if (isset($_POST['cf7_validator_import']) && check_admin_referer('cf7_validator_import_nonce')) {
+            // Check user capability
+            if (!current_user_can('manage_options')) {
+                wp_die(__('You do not have sufficient permissions to access this page.'));
+            }
+
+            if (isset($_FILES['import_file']) && $_FILES['import_file']['error'] === UPLOAD_ERR_OK) {
+                // Validate file size (max 1MB)
+                $max_size = 1024 * 1024; // 1MB
+                if ($_FILES['import_file']['size'] > $max_size) {
+                    add_settings_error(
+                        'cf7_validator_import',
+                        'import_error',
+                        'File size exceeds maximum allowed size (1MB).',
+                        'error'
+                    );
+                    wp_safe_redirect(admin_url('admin.php?page=cf7-validator-settings'));
+                    exit;
+                }
+
+                // Validate file extension
+                $file_name = $_FILES['import_file']['name'];
+                $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+                if ($file_ext !== 'json') {
+                    add_settings_error(
+                        'cf7_validator_import',
+                        'import_error',
+                        'Invalid file type. Only JSON files are allowed.',
+                        'error'
+                    );
+                    wp_safe_redirect(admin_url('admin.php?page=cf7-validator-settings'));
+                    exit;
+                }
+
+                // Read and validate JSON
+                $file_content = file_get_contents($_FILES['import_file']['tmp_name']);
+                $settings = json_decode($file_content, true);
+
+                // Check for JSON errors
+                if (json_last_error() !== JSON_ERROR_NONE) {
+                    add_settings_error(
+                        'cf7_validator_import',
+                        'import_error',
+                        'Invalid JSON format: ' . json_last_error_msg(),
+                        'error'
+                    );
+                    wp_safe_redirect(admin_url('admin.php?page=cf7-validator-settings'));
+                    exit;
+                }
+
+                // Validate structure and sanitize
+                if ($settings && isset($settings['global_rules']) && is_array($settings['global_rules'])) {
+                    // Sanitize imported rules before saving
+                    $sanitized_rules = $this->sanitize_global_rules($settings['global_rules']);
+                    update_option($this->option_name, $sanitized_rules);
+                    add_settings_error(
+                        'cf7_validator_import',
+                        'import_success',
+                        'Settings imported successfully!',
+                        'success'
+                    );
+                } else {
+                    add_settings_error(
+                        'cf7_validator_import',
+                        'import_error',
+                        'Invalid import file format.',
+                        'error'
+                    );
+                }
+
+                wp_safe_redirect(admin_url('admin.php?page=cf7-validator-settings'));
+                exit;
+            }
+        }
+    }
+
     /**
      * Render the settings page
      */
@@ -365,10 +508,46 @@ class CF7_Field_Validator
         <div class="wrap">
             <h1>CF7 Field Validator Global Settings</h1>
             <p>Define validation rules that will apply to all Contact Form 7 forms (unless disabled for specific forms).</p>
-            
+
+            <!-- Import/Export Section -->
+            <div class="card" style="max-width: 800px; margin-bottom: 20px;">
+                <h2>Import/Export Settings</h2>
+
+                <div style="display: flex; gap: 20px; margin-bottom: 15px;">
+                    <!-- Export Form -->
+                    <div style="flex: 1;">
+                        <h3>Export Settings</h3>
+                        <p>Download your current validation rules as a JSON file.</p>
+                        <form method="post" action="">
+                            <?php wp_nonce_field('cf7_validator_export_nonce'); ?>
+                            <button type="submit" name="cf7_validator_export" class="button button-secondary">
+                                Export Settings
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Import Form -->
+                    <div style="flex: 1;">
+                        <h3>Import Settings</h3>
+                        <p>Upload a previously exported JSON file to restore settings.</p>
+                        <form method="post" action="" enctype="multipart/form-data">
+                            <?php wp_nonce_field('cf7_validator_import_nonce'); ?>
+                            <input type="file" name="import_file" accept=".json" required style="margin-bottom: 10px;" />
+                            <br>
+                            <button type="submit" name="cf7_validator_import" class="button button-secondary">
+                                Import Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <p class="description"><strong>Note:</strong> Importing will replace all current global validation rules.</p>
+            </div>
+
+            <?php settings_errors('cf7_validator_import'); ?>
+
             <form method="post" action="options.php">
                 <?php settings_fields('cf7_field_validator_settings'); ?>
-                
+
                 <h2>Global Validation Rules</h2>
                 <fieldset>
                     <legend>Will allow submission only if:</legend>
@@ -401,10 +580,10 @@ class CF7_Field_Validator
                     const template = `
                     <tr>
                         <td>
-                            <input type="text" name="<?php echo $this->option_name; ?>[${globalRuleCount}][field]" placeholder="Field name" />
+                            <input type="text" name="<?php echo esc_attr($this->option_name); ?>[${globalRuleCount}][field]" placeholder="Field name" />
                         </td>
                         <td>
-                            <select name="<?php echo $this->option_name; ?>[${globalRuleCount}][operator]">
+                            <select name="<?php echo esc_attr($this->option_name); ?>[${globalRuleCount}][operator]">
                                 <option value="equals">Equals</option>
                                 <option value="not_equals">Not Equals</option>
                                 <option value="contains">Contains</option>
@@ -412,10 +591,10 @@ class CF7_Field_Validator
                             </select>
                         </td>
                         <td>
-                            <input type="text" name="<?php echo $this->option_name; ?>[${globalRuleCount}][value]" placeholder="Value or comma-separated list (red,green,blue)" />
+                            <input type="text" name="<?php echo esc_attr($this->option_name); ?>[${globalRuleCount}][value]" placeholder="Value or comma-separated list (red,green,blue)" />
                         </td>
                         <td>
-                            <input type="text" name="<?php echo $this->option_name; ?>[${globalRuleCount}][message]" placeholder="Error message" />
+                            <input type="text" name="<?php echo esc_attr($this->option_name); ?>[${globalRuleCount}][message]" placeholder="Error message" />
                         </td>
                         <td>
                             <button type="button" class="button remove-global-rule">Remove</button>
