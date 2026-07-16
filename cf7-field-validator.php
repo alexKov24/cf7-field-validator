@@ -19,6 +19,7 @@ if (!defined('ABSPATH')) {
 class CF7_Field_Validator
 {
     private $option_name = 'cf7_field_validator_global_rules';
+    private $debug_option_name = 'cf7_field_validator_debug';
     private $rules_schema_option = 'cf7_field_validator_rules_schema_version';
     private $rules_schema_version = '2';
 
@@ -83,6 +84,13 @@ class CF7_Field_Validator
                 '1.3.0',
                 true
             );
+            wp_add_inline_script(
+                'cf7-validator-admin',
+                'window.CF7FieldValidatorConfig = ' . wp_json_encode([
+                    'debug' => (bool) get_option($this->debug_option_name, false),
+                ]) . ';',
+                'before'
+            );
         }
     }
 
@@ -119,7 +127,10 @@ class CF7_Field_Validator
 
         wp_add_inline_script(
             'cf7-validator-frontend',
-            'window.CF7FieldValidatorRules = ' . wp_json_encode($form_rules) . ';',
+            'window.CF7FieldValidatorConfig = ' . wp_json_encode([
+                'debug' => (bool) get_option($this->debug_option_name, false),
+                'rules' => $form_rules,
+            ]) . ';',
             'before'
         );
     }
@@ -406,6 +417,11 @@ class CF7_Field_Validator
             $this->option_name, // Option name
             [$this, 'sanitize_global_rules'] // Sanitize callback
         );
+        register_setting(
+            'cf7_field_validator_settings',
+            $this->debug_option_name,
+            [$this, 'sanitize_debug_setting']
+        );
     }
     
     /**
@@ -434,6 +450,14 @@ class CF7_Field_Validator
 
         // Keep existing global settings intact if a request bypasses browser validation.
         return $has_invalid_rule ? get_option($this->option_name, []) : $sanitized;
+    }
+
+    /**
+     * Store debug mode as a boolean-like option.
+     */
+    public function sanitize_debug_setting($value)
+    {
+        return $value ? '1' : '0';
     }
 
     /**
@@ -758,6 +782,14 @@ class CF7_Field_Validator
 
             <form method="post" action="options.php">
                 <?php settings_fields('cf7_field_validator_settings'); ?>
+
+                <h2>Debugging</h2>
+                <label>
+                    <input type="hidden" name="<?php echo esc_attr($this->debug_option_name); ?>" value="0" />
+                    <input type="checkbox" name="<?php echo esc_attr($this->debug_option_name); ?>" value="1" <?php checked(get_option($this->debug_option_name, false), '1'); ?> />
+                    Enable browser console debug logging
+                </label>
+                <p class="description">Logs validator activity in the browser console for both the rule editor and public forms.</p>
 
                 <h2>Global Validation Rules</h2>
                 <fieldset>
