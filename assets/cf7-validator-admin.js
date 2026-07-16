@@ -17,6 +17,9 @@ jQuery(document).ready(function($) {
                     <option value="length_more_than">Length More Than</option>
                     <option value="length_less_than">Length Less Than</option>
                     <option value="length_is">Length Is</option>
+                    <option value="number_less_than">Number Less Than</option>
+                    <option value="number_more_than">Number More Than</option>
+                    <option value="number_equals">Number Equals</option>
                 </select>
             </td>
             <td>
@@ -57,6 +60,9 @@ jQuery(document).ready(function($) {
                     <option value="length_more_than">Length More Than</option>
                     <option value="length_less_than">Length Less Than</option>
                     <option value="length_is">Length Is</option>
+                    <option value="number_less_than">Number Less Than</option>
+                    <option value="number_more_than">Number More Than</option>
+                    <option value="number_equals">Number Equals</option>
                 </select>
             </td>
             <td>

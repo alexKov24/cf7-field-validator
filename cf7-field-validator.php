@@ -170,6 +170,9 @@ class CF7_Field_Validator
                     <option value="length_more_than" <?php selected(($rule['operator'] ?? ''), 'length_more_than'); ?>>Length More Than</option>
                     <option value="length_less_than" <?php selected(($rule['operator'] ?? ''), 'length_less_than'); ?>>Length Less Than</option>
                     <option value="length_is" <?php selected(($rule['operator'] ?? ''), 'length_is'); ?>>Length Is</option>
+                    <option value="number_less_than" <?php selected(($rule['operator'] ?? ''), 'number_less_than'); ?>>Number Less Than</option>
+                    <option value="number_more_than" <?php selected(($rule['operator'] ?? ''), 'number_more_than'); ?>>Number More Than</option>
+                    <option value="number_equals" <?php selected(($rule['operator'] ?? ''), 'number_equals'); ?>>Number Equals</option>
                 </select>
             </td>
             <td>
@@ -208,7 +211,7 @@ class CF7_Field_Validator
                 if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
                     $sanitized_rules[] = array(
                         'field' => sanitize_text_field($rule['field']),
-                        'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is'], true)
+                        'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals'], true)
                             ? $rule['operator']
                             : 'equals',
                         'value' => sanitize_text_field($rule['value']),
@@ -314,6 +317,12 @@ class CF7_Field_Validator
                 } elseif ($rule['operator'] === 'length_is') {
                     $length = function_exists('mb_strlen') ? mb_strlen($posted_value) : strlen($posted_value);
                     $is_invalid = $length !== (int) $rule['value'];
+                } elseif ($rule['operator'] === 'number_less_than') {
+                    $is_invalid = !is_numeric($posted_value) || (float) $posted_value >= (float) $rule['value'];
+                } elseif ($rule['operator'] === 'number_more_than') {
+                    $is_invalid = !is_numeric($posted_value) || (float) $posted_value <= (float) $rule['value'];
+                } elseif ($rule['operator'] === 'number_equals') {
+                    $is_invalid = !is_numeric($posted_value) || (float) $posted_value !== (float) $rule['value'];
                 }
 
                 if ($is_invalid) {
@@ -375,7 +384,7 @@ class CF7_Field_Validator
             if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
                 $sanitized[] = [
                     'field' => sanitize_text_field($rule['field']),
-                    'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is'], true)
+                    'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals'], true)
                         ? $rule['operator']
                         : 'equals',
                     'value' => sanitize_text_field($rule['value']),
@@ -589,6 +598,9 @@ class CF7_Field_Validator
                     <option value="length_more_than" <?php selected(($rule['operator'] ?? ''), 'length_more_than'); ?>>Length More Than</option>
                     <option value="length_less_than" <?php selected(($rule['operator'] ?? ''), 'length_less_than'); ?>>Length Less Than</option>
                     <option value="length_is" <?php selected(($rule['operator'] ?? ''), 'length_is'); ?>>Length Is</option>
+                    <option value="number_less_than" <?php selected(($rule['operator'] ?? ''), 'number_less_than'); ?>>Number Less Than</option>
+                    <option value="number_more_than" <?php selected(($rule['operator'] ?? ''), 'number_more_than'); ?>>Number More Than</option>
+                    <option value="number_equals" <?php selected(($rule['operator'] ?? ''), 'number_equals'); ?>>Number Equals</option>
                 </select>
             </td>
             <td>
