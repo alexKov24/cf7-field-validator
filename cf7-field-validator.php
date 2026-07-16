@@ -167,6 +167,9 @@ class CF7_Field_Validator
                     <option value="not_equals" <?php selected(($rule['operator'] ?? ''), 'not_equals'); ?>>Not Equals</option>
                     <option value="contains" <?php selected(($rule['operator'] ?? ''), 'contains'); ?>>Contains</option>
                     <option value="not_contains" <?php selected(($rule['operator'] ?? ''), 'not_contains'); ?>>Not Contains</option>
+                    <option value="length_more_than" <?php selected(($rule['operator'] ?? ''), 'length_more_than'); ?>>Length More Than</option>
+                    <option value="length_less_than" <?php selected(($rule['operator'] ?? ''), 'length_less_than'); ?>>Length Less Than</option>
+                    <option value="length_is" <?php selected(($rule['operator'] ?? ''), 'length_is'); ?>>Length Is</option>
                 </select>
             </td>
             <td>
@@ -202,10 +205,10 @@ class CF7_Field_Validator
         if (isset($_POST['validator_rules'])) {
             $sanitized_rules = array();
             foreach ($_POST['validator_rules'] as $rule) {
-                if (!empty($rule['field']) && !empty($rule['value'])) {
+                if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
                     $sanitized_rules[] = array(
                         'field' => sanitize_text_field($rule['field']),
-                        'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains'])
+                        'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is'], true)
                             ? $rule['operator']
                             : 'equals',
                         'value' => sanitize_text_field($rule['value']),
@@ -302,6 +305,15 @@ class CF7_Field_Validator
                             break;
                         }
                     }
+                } elseif ($rule['operator'] === 'length_more_than') {
+                    $length = function_exists('mb_strlen') ? mb_strlen($posted_value) : strlen($posted_value);
+                    $is_invalid = $length <= (int) $rule['value'];
+                } elseif ($rule['operator'] === 'length_less_than') {
+                    $length = function_exists('mb_strlen') ? mb_strlen($posted_value) : strlen($posted_value);
+                    $is_invalid = $length >= (int) $rule['value'];
+                } elseif ($rule['operator'] === 'length_is') {
+                    $length = function_exists('mb_strlen') ? mb_strlen($posted_value) : strlen($posted_value);
+                    $is_invalid = $length !== (int) $rule['value'];
                 }
 
                 if ($is_invalid) {
@@ -360,10 +372,10 @@ class CF7_Field_Validator
 
         $sanitized = [];
         foreach ($input as $rule) {
-            if (!empty($rule['field']) && !empty($rule['value'])) {
+            if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
                 $sanitized[] = [
                     'field' => sanitize_text_field($rule['field']),
-                    'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains'])
+                    'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is'], true)
                         ? $rule['operator']
                         : 'equals',
                     'value' => sanitize_text_field($rule['value']),
@@ -574,6 +586,9 @@ class CF7_Field_Validator
                     <option value="not_equals" <?php selected(($rule['operator'] ?? ''), 'not_equals'); ?>>Not Equals</option>
                     <option value="contains" <?php selected(($rule['operator'] ?? ''), 'contains'); ?>>Contains</option>
                     <option value="not_contains" <?php selected(($rule['operator'] ?? ''), 'not_contains'); ?>>Not Contains</option>
+                    <option value="length_more_than" <?php selected(($rule['operator'] ?? ''), 'length_more_than'); ?>>Length More Than</option>
+                    <option value="length_less_than" <?php selected(($rule['operator'] ?? ''), 'length_less_than'); ?>>Length Less Than</option>
+                    <option value="length_is" <?php selected(($rule['operator'] ?? ''), 'length_is'); ?>>Length Is</option>
                 </select>
             </td>
             <td>

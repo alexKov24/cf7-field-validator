@@ -14,6 +14,9 @@ jQuery(document).ready(function($) {
                     <option value="not_equals">Not Equals</option>
                     <option value="contains">Contains</option>
                     <option value="not_contains">Not Contains</option>
+                    <option value="length_more_than">Length More Than</option>
+                    <option value="length_less_than">Length Less Than</option>
+                    <option value="length_is">Length Is</option>
                 </select>
             </td>
             <td>
@@ -51,6 +54,9 @@ jQuery(document).ready(function($) {
                     <option value="not_equals">Not Equals</option>
                     <option value="contains">Contains</option>
                     <option value="not_contains">Not Contains</option>
+                    <option value="length_more_than">Length More Than</option>
+                    <option value="length_less_than">Length Less Than</option>
+                    <option value="length_is">Length Is</option>
                 </select>
             </td>
             <td>
