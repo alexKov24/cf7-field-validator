@@ -41,14 +41,20 @@ jQuery(document).ready(function($) {
         return null;
     }
 
-    $('#validator-rules, #global-validator-rules').closest('form').on('submit', function(event) {
-        const invalidInput = $(this).find('#validator-rules tr, #global-validator-rules tr').map(function() {
-            return ruleError($(this));
-        }).get().find(Boolean)[0];
+    $(document).on('submit', 'form', function(event) {
+        let invalidInput = null;
+
+        $(this).find('#validator-rules tr, #global-validator-rules tr').each(function() {
+            if (!invalidInput) {
+                invalidInput = ruleError($(this));
+            }
+        });
 
         if (invalidInput) {
             event.preventDefault();
+            event.stopImmediatePropagation();
             invalidInput.reportValidity();
+            return false;
         }
     });
 

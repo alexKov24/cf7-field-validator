@@ -253,13 +253,24 @@ class CF7_Field_Validator
         // Save form-specific rules with sanitization
         if (isset($_POST['validator_rules'])) {
             $sanitized_rules = array();
+            $has_invalid_rule = false;
             foreach ($_POST['validator_rules'] as $rule) {
+                if ($this->is_blank_rule($rule)) {
+                    continue;
+                }
+
                 $sanitized_rule = $this->sanitize_rule($rule);
                 if ($sanitized_rule !== null) {
                     $sanitized_rules[] = $sanitized_rule;
+                } else {
+                    $has_invalid_rule = true;
                 }
             }
-            update_post_meta($contact_form->id(), 'validator_rules', $sanitized_rules);
+
+            // Do not erase existing rules when validation is bypassed or fails.
+            if (!$has_invalid_rule) {
+                update_post_meta($contact_form->id(), 'validator_rules', $sanitized_rules);
+            }
         }
 
         // Save global rules toggle
@@ -407,14 +418,22 @@ class CF7_Field_Validator
         }
 
         $sanitized = [];
+        $has_invalid_rule = false;
         foreach ($input as $rule) {
+            if ($this->is_blank_rule($rule)) {
+                continue;
+            }
+
             $sanitized_rule = $this->sanitize_rule($rule);
             if ($sanitized_rule !== null) {
                 $sanitized[] = $sanitized_rule;
+            } else {
+                $has_invalid_rule = true;
             }
         }
 
-        return $sanitized;
+        // Keep existing global settings intact if a request bypasses browser validation.
+        return $has_invalid_rule ? get_option($this->option_name, []) : $sanitized;
     }
 
     /**
@@ -472,6 +491,17 @@ class CF7_Field_Validator
             'value' => $value,
             'message' => sanitize_text_field($rule['message'] ?? '')
         ];
+    }
+
+    /**
+     * Empty placeholder rows are safe to ignore; partially filled rows are not.
+     */
+    private function is_blank_rule($rule)
+    {
+        return is_array($rule)
+            && empty($rule['field'])
+            && (!isset($rule['value']) || $rule['value'] === '')
+            && empty($rule['message']);
     }
 
     /**
