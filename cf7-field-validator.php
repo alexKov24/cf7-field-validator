@@ -11,11 +11,6 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: cf7-field-validator
 */
 
-// Exit if accessed directly
-if (!defined('ABSPATH')) {
-    exit;
-}
-
 // Prevent direct file access
 if (!defined('ABSPATH')) {
     exit;
