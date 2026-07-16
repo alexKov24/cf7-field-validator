@@ -20,6 +20,7 @@ jQuery(document).ready(function($) {
                     <option value="number_less_than">Number Less Than</option>
                     <option value="number_more_than">Number More Than</option>
                     <option value="number_equals">Number Equals</option>
+                    <option value="custom_regex">Custom Regex</option>
                 </select>
             </td>
             <td>
@@ -63,6 +64,7 @@ jQuery(document).ready(function($) {
                     <option value="number_less_than">Number Less Than</option>
                     <option value="number_more_than">Number More Than</option>
                     <option value="number_equals">Number Equals</option>
+                    <option value="custom_regex">Custom Regex</option>
                 </select>
             </td>
             <td>

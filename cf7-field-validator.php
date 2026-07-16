@@ -77,7 +77,7 @@ class CF7_Field_Validator
                 'cf7-validator-admin',
                 plugin_dir_url(__FILE__) . 'assets/cf7-validator-admin.js',
                 ['jquery'],
-                '1.0.3',
+                '1.0.4',
                 true
             );
         }
@@ -142,7 +142,7 @@ class CF7_Field_Validator
                     ?>
                 </tbody>
             </table>
-            <p class="description">For multiple values, use comma-separated list (e.g., "red,green,blue"). The condition will be matched if ANY value in the list is matched.</p>
+            <p class="description">For multiple values, use a comma-separated list (e.g., "red,green,blue"). For Custom Regex, enter a complete PCRE pattern such as <code>/^[A-Z]{3}$/</code>.</p>
             <button type="button" class="button" id="add-rule">Add New Rule</button>
         </fieldset>
     <?php
@@ -173,6 +173,7 @@ class CF7_Field_Validator
                     <option value="number_less_than" <?php selected(($rule['operator'] ?? ''), 'number_less_than'); ?>>Number Less Than</option>
                     <option value="number_more_than" <?php selected(($rule['operator'] ?? ''), 'number_more_than'); ?>>Number More Than</option>
                     <option value="number_equals" <?php selected(($rule['operator'] ?? ''), 'number_equals'); ?>>Number Equals</option>
+                    <option value="custom_regex" <?php selected(($rule['operator'] ?? ''), 'custom_regex'); ?>>Custom Regex</option>
                 </select>
             </td>
             <td>
@@ -211,10 +212,10 @@ class CF7_Field_Validator
                 if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
                     $sanitized_rules[] = array(
                         'field' => sanitize_text_field($rule['field']),
-                        'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals'], true)
+                        'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals', 'custom_regex'], true)
                             ? $rule['operator']
                             : 'equals',
-                        'value' => sanitize_text_field($rule['value']),
+                        'value' => $this->sanitize_rule_value($rule['value'], $rule['operator']),
                         'message' => sanitize_text_field($rule['message'] ?? '')
                     );
                 }
@@ -323,6 +324,8 @@ class CF7_Field_Validator
                     $is_invalid = !is_numeric($posted_value) || (float) $posted_value <= (float) $rule['value'];
                 } elseif ($rule['operator'] === 'number_equals') {
                     $is_invalid = !is_numeric($posted_value) || (float) $posted_value !== (float) $rule['value'];
+                } elseif ($rule['operator'] === 'custom_regex') {
+                    $is_invalid = @preg_match($rule['value'], $posted_value) !== 1;
                 }
 
                 if ($is_invalid) {
@@ -384,16 +387,28 @@ class CF7_Field_Validator
             if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
                 $sanitized[] = [
                     'field' => sanitize_text_field($rule['field']),
-                    'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals'], true)
+                    'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals', 'custom_regex'], true)
                         ? $rule['operator']
                         : 'equals',
-                    'value' => sanitize_text_field($rule['value']),
+                    'value' => $this->sanitize_rule_value($rule['value'], $rule['operator']),
                     'message' => sanitize_text_field($rule['message'] ?? '')
                 ];
             }
         }
 
         return $sanitized;
+    }
+
+    /**
+     * Sanitize a rule value while preserving valid regular expression syntax.
+     */
+    private function sanitize_rule_value($value, $operator)
+    {
+        if ($operator === 'custom_regex' && is_string($value)) {
+            return trim(preg_replace('/[\r\n\0]/', '', wp_unslash($value)));
+        }
+
+        return sanitize_text_field($value);
     }
     
     /**
@@ -566,7 +581,7 @@ class CF7_Field_Validator
                             ?>
                         </tbody>
                     </table>
-                    <p class="description">For "In List" and "Not In List" operators, use comma-separated values (e.g., "red,green,blue").</p>
+                    <p class="description">For multiple values, use a comma-separated list (e.g., "red,green,blue"). For Custom Regex, enter a complete PCRE pattern such as <code>/^[A-Z]{3}$/</code>.</p>
             <button type="button" class="button" id="add-global-rule">Add New Rule</button>
                 </fieldset>
 
@@ -601,6 +616,7 @@ class CF7_Field_Validator
                     <option value="number_less_than" <?php selected(($rule['operator'] ?? ''), 'number_less_than'); ?>>Number Less Than</option>
                     <option value="number_more_than" <?php selected(($rule['operator'] ?? ''), 'number_more_than'); ?>>Number More Than</option>
                     <option value="number_equals" <?php selected(($rule['operator'] ?? ''), 'number_equals'); ?>>Number Equals</option>
+                    <option value="custom_regex" <?php selected(($rule['operator'] ?? ''), 'custom_regex'); ?>>Custom Regex</option>
                 </select>
             </td>
             <td>
