@@ -9,11 +9,15 @@ jQuery(document).ready(function($) {
                 <input type="text" name="validator_rules[${ruleCount}][field]" placeholder="Field name" />
             </td>
             <td>
+                <select name="validator_rules[${ruleCount}][negate]">
+                    <option value="no">Is</option>
+                    <option value="yes">Is Not</option>
+                </select>
+            </td>
+            <td>
                 <select name="validator_rules[${ruleCount}][operator]">
                     <option value="equals">Equals</option>
-                    <option value="not_equals">Not Equals</option>
                     <option value="contains">Contains</option>
-                    <option value="not_contains">Not Contains</option>
                     <option value="length_more_than">Length More Than</option>
                     <option value="length_less_than">Length Less Than</option>
                     <option value="length_is">Length Is</option>
@@ -53,11 +57,15 @@ jQuery(document).ready(function($) {
                 <input type="text" name="${globalOptionName}[${globalRuleCount}][field]" placeholder="Field name" />
             </td>
             <td>
+                <select name="${globalOptionName}[${globalRuleCount}][negate]">
+                    <option value="no">Is</option>
+                    <option value="yes">Is Not</option>
+                </select>
+            </td>
+            <td>
                 <select name="${globalOptionName}[${globalRuleCount}][operator]">
                     <option value="equals">Equals</option>
-                    <option value="not_equals">Not Equals</option>
                     <option value="contains">Contains</option>
-                    <option value="not_contains">Not Contains</option>
                     <option value="length_more_than">Length More Than</option>
                     <option value="length_less_than">Length Less Than</option>
                     <option value="length_is">Length Is</option>

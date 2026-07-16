@@ -3,7 +3,7 @@
 Plugin Name: CF7 Field Validator
 Plugin URI: https://github.com/alexKov24/cf7-field-validator/tree/main
 Description: Custom validation tab in CF7 editor with global settings support
-Version: 1.1.0
+Version: 1.2.0
 Author: Alex Kovalev
 Author URI: https://webchad.tech
 License: GPL v2 or later
@@ -19,6 +19,8 @@ if (!defined('ABSPATH')) {
 class CF7_Field_Validator
 {
     private $option_name = 'cf7_field_validator_global_rules';
+    private $rules_schema_option = 'cf7_field_validator_rules_schema_version';
+    private $rules_schema_version = '2';
 
     /**
      * Modify the constructor to include settings link
@@ -49,6 +51,9 @@ class CF7_Field_Validator
 
         // Enqueue admin scripts
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
+
+        // Migrate installations that update the plugin without reactivating it.
+        add_action('admin_init', [$this, 'maybe_migrate_legacy_rules']);
     }
     
     /**
@@ -72,7 +77,7 @@ class CF7_Field_Validator
                 'cf7-validator-admin',
                 plugin_dir_url(__FILE__) . 'assets/cf7-validator-admin.js',
                 ['jquery'],
-                '1.0.4',
+                '1.1.0',
                 true
             );
         }
@@ -157,11 +162,15 @@ class CF7_Field_Validator
                     placeholder="Field name" />
             </td>
             <td>
+                <select name="validator_rules[<?php echo $index; ?>][negate]">
+                    <option value="no" <?php selected(!empty($rule['negate']), false); ?>>Is</option>
+                    <option value="yes" <?php selected(!empty($rule['negate']), true); ?>>Is Not</option>
+                </select>
+            </td>
+            <td>
                 <select name="validator_rules[<?php echo $index; ?>][operator]">
                     <option value="equals" <?php selected(($rule['operator'] ?? ''), 'equals'); ?>>Equals</option>
-                    <option value="not_equals" <?php selected(($rule['operator'] ?? ''), 'not_equals'); ?>>Not Equals</option>
                     <option value="contains" <?php selected(($rule['operator'] ?? ''), 'contains'); ?>>Contains</option>
-                    <option value="not_contains" <?php selected(($rule['operator'] ?? ''), 'not_contains'); ?>>Not Contains</option>
                     <option value="length_more_than" <?php selected(($rule['operator'] ?? ''), 'length_more_than'); ?>>Length More Than</option>
                     <option value="length_less_than" <?php selected(($rule['operator'] ?? ''), 'length_less_than'); ?>>Length Less Than</option>
                     <option value="length_is" <?php selected(($rule['operator'] ?? ''), 'length_is'); ?>>Length Is</option>
@@ -207,9 +216,10 @@ class CF7_Field_Validator
                 if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
                     $sanitized_rules[] = array(
                         'field' => sanitize_text_field($rule['field']),
-                        'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals', 'custom_regex'], true)
+                        'operator' => in_array($rule['operator'], ['equals', 'contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals', 'custom_regex'], true)
                             ? $rule['operator']
                             : 'equals',
+                        'negate' => isset($rule['negate']) && $rule['negate'] === 'yes',
                         'value' => $this->sanitize_rule_value($rule['value'], $rule['operator']),
                         'message' => sanitize_text_field($rule['message'] ?? '')
                     );
@@ -259,14 +269,26 @@ class CF7_Field_Validator
                     $posted_value = implode(',', $posted_value);
                 }
 
-                $is_invalid = false;
+                $operator = $rule['operator'] ?? 'equals';
+                $negate = !empty($rule['negate']);
+
+                // Preserve legacy rules that have not yet been migrated.
+                if ($operator === 'not_equals') {
+                    $operator = 'equals';
+                    $negate = true;
+                } elseif ($operator === 'not_contains') {
+                    $operator = 'contains';
+                    $negate = true;
+                }
+
+                $matches = false;
                 
                 // Convert rule value to array if it contains commas
                 $rule_values = strpos($rule['value'], ',') !== false 
                     ? array_map('trim', explode(',', $rule['value'])) 
                     : [$rule['value']];
                 
-                if ($rule['operator'] === 'equals') {
+                if ($operator === 'equals') {
                     // Check if posted value equals ANY of the values in the list
                     $matches_any = false;
                     foreach ($rule_values as $value) {
@@ -275,17 +297,8 @@ class CF7_Field_Validator
                             break;
                         }
                     }
-                    $is_invalid = !$matches_any;
-                } elseif ($rule['operator'] === 'not_equals') {
-                    // Check if posted value equals ANY of the values in the list
-                    // If it matches any, validation fails
-                    foreach ($rule_values as $value) {
-                        if ($posted_value === $value) {
-                            $is_invalid = true;
-                            break;
-                        }
-                    }
-                } elseif ($rule['operator'] === 'contains') {
+                    $matches = $matches_any;
+                } elseif ($operator === 'contains') {
                     // Check if posted value contains ANY of the values in the list
                     $contains_any = false;
                     foreach ($rule_values as $value) {
@@ -294,34 +307,27 @@ class CF7_Field_Validator
                             break;
                         }
                     }
-                    $is_invalid = !$contains_any;
-                } elseif ($rule['operator'] === 'not_contains') {
-                    // Check if posted value contains ANY of the values in the list
-                    // If it contains any, validation fails
-                    foreach ($rule_values as $value) {
-                        if (strpos($posted_value, $value) !== false) {
-                            $is_invalid = true;
-                            break;
-                        }
-                    }
-                } elseif ($rule['operator'] === 'length_more_than') {
+                    $matches = $contains_any;
+                } elseif ($operator === 'length_more_than') {
                     $length = function_exists('mb_strlen') ? mb_strlen($posted_value) : strlen($posted_value);
-                    $is_invalid = $length <= (int) $rule['value'];
-                } elseif ($rule['operator'] === 'length_less_than') {
+                    $matches = $length > (int) $rule['value'];
+                } elseif ($operator === 'length_less_than') {
                     $length = function_exists('mb_strlen') ? mb_strlen($posted_value) : strlen($posted_value);
-                    $is_invalid = $length >= (int) $rule['value'];
-                } elseif ($rule['operator'] === 'length_is') {
+                    $matches = $length < (int) $rule['value'];
+                } elseif ($operator === 'length_is') {
                     $length = function_exists('mb_strlen') ? mb_strlen($posted_value) : strlen($posted_value);
-                    $is_invalid = $length !== (int) $rule['value'];
-                } elseif ($rule['operator'] === 'number_less_than') {
-                    $is_invalid = !is_numeric($posted_value) || (float) $posted_value >= (float) $rule['value'];
-                } elseif ($rule['operator'] === 'number_more_than') {
-                    $is_invalid = !is_numeric($posted_value) || (float) $posted_value <= (float) $rule['value'];
-                } elseif ($rule['operator'] === 'number_equals') {
-                    $is_invalid = !is_numeric($posted_value) || (float) $posted_value !== (float) $rule['value'];
-                } elseif ($rule['operator'] === 'custom_regex') {
-                    $is_invalid = @preg_match($rule['value'], $posted_value) !== 1;
+                    $matches = $length === (int) $rule['value'];
+                } elseif ($operator === 'number_less_than') {
+                    $matches = is_numeric($posted_value) && (float) $posted_value < (float) $rule['value'];
+                } elseif ($operator === 'number_more_than') {
+                    $matches = is_numeric($posted_value) && (float) $posted_value > (float) $rule['value'];
+                } elseif ($operator === 'number_equals') {
+                    $matches = is_numeric($posted_value) && (float) $posted_value === (float) $rule['value'];
+                } elseif ($operator === 'custom_regex') {
+                    $matches = @preg_match($rule['value'], $posted_value) === 1;
                 }
+
+                $is_invalid = $negate ? $matches : !$matches;
 
                 if ($is_invalid) {
                     // Find the corresponding tag
@@ -382,9 +388,10 @@ class CF7_Field_Validator
             if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
                 $sanitized[] = [
                     'field' => sanitize_text_field($rule['field']),
-                    'operator' => in_array($rule['operator'], ['equals', 'not_equals', 'contains', 'not_contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals', 'custom_regex'], true)
+                    'operator' => in_array($rule['operator'], ['equals', 'contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals', 'custom_regex'], true)
                         ? $rule['operator']
                         : 'equals',
+                    'negate' => isset($rule['negate']) && $rule['negate'] === 'yes',
                     'value' => $this->sanitize_rule_value($rule['value'], $rule['operator']),
                     'message' => sanitize_text_field($rule['message'] ?? '')
                 ];
@@ -404,6 +411,75 @@ class CF7_Field_Validator
         }
 
         return sanitize_text_field($value);
+    }
+
+    /**
+     * Migrate combined legacy operators to a base operator plus negation flag.
+     */
+    public function maybe_migrate_legacy_rules()
+    {
+        if (get_option($this->rules_schema_option) !== $this->rules_schema_version) {
+            $this->migrate_legacy_rules();
+        }
+    }
+
+    /**
+     * Run the rules migration on activation and once after upgrades.
+     */
+    public function migrate_legacy_rules()
+    {
+        $global_rules = get_option($this->option_name, []);
+        $migrated_global_rules = $this->migrate_rule_set($global_rules);
+
+        if ($migrated_global_rules !== $global_rules) {
+            update_option($this->option_name, $migrated_global_rules);
+        }
+
+        $form_ids = get_posts([
+            'post_type' => 'wpcf7_contact_form',
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+        ]);
+
+        foreach ($form_ids as $form_id) {
+            $rules = get_post_meta($form_id, 'validator_rules', true);
+            $migrated_rules = $this->migrate_rule_set($rules);
+
+            if ($migrated_rules !== $rules) {
+                update_post_meta($form_id, 'validator_rules', $migrated_rules);
+            }
+        }
+
+        update_option($this->rules_schema_option, $this->rules_schema_version);
+    }
+
+    /**
+     * Convert a rule set without changing its validation semantics.
+     */
+    private function migrate_rule_set($rules)
+    {
+        if (!is_array($rules)) {
+            return $rules;
+        }
+
+        foreach ($rules as &$rule) {
+            if (!is_array($rule)) {
+                continue;
+            }
+
+            if (($rule['operator'] ?? '') === 'not_equals') {
+                $rule['operator'] = 'equals';
+                $rule['negate'] = true;
+            } elseif (($rule['operator'] ?? '') === 'not_contains') {
+                $rule['operator'] = 'contains';
+                $rule['negate'] = true;
+            } elseif (!array_key_exists('negate', $rule)) {
+                $rule['negate'] = false;
+            }
+        }
+        unset($rule);
+
+        return $rules;
     }
     
     /**
@@ -600,11 +676,15 @@ class CF7_Field_Validator
                     placeholder="Field name" />
             </td>
             <td>
+                <select name="<?php echo $this->option_name; ?>[<?php echo $index; ?>][negate]">
+                    <option value="no" <?php selected(!empty($rule['negate']), false); ?>>Is</option>
+                    <option value="yes" <?php selected(!empty($rule['negate']), true); ?>>Is Not</option>
+                </select>
+            </td>
+            <td>
                 <select name="<?php echo $this->option_name; ?>[<?php echo $index; ?>][operator]">
                     <option value="equals" <?php selected(($rule['operator'] ?? ''), 'equals'); ?>>Equals</option>
-                    <option value="not_equals" <?php selected(($rule['operator'] ?? ''), 'not_equals'); ?>>Not Equals</option>
                     <option value="contains" <?php selected(($rule['operator'] ?? ''), 'contains'); ?>>Contains</option>
-                    <option value="not_contains" <?php selected(($rule['operator'] ?? ''), 'not_contains'); ?>>Not Contains</option>
                     <option value="length_more_than" <?php selected(($rule['operator'] ?? ''), 'length_more_than'); ?>>Length More Than</option>
                     <option value="length_less_than" <?php selected(($rule['operator'] ?? ''), 'length_less_than'); ?>>Length Less Than</option>
                     <option value="length_is" <?php selected(($rule['operator'] ?? ''), 'length_is'); ?>>Length Is</option>
@@ -635,4 +715,5 @@ class CF7_Field_Validator
 }
 
 // Initialize plugin
-new CF7_Field_Validator();
+$cf7_field_validator = new CF7_Field_Validator();
+register_activation_hook(__FILE__, [$cf7_field_validator, 'migrate_legacy_rules']);
