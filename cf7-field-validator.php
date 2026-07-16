@@ -3,7 +3,7 @@
 Plugin Name: CF7 Field Validator
 Plugin URI: https://github.com/alexKov24/cf7-field-validator/tree/main
 Description: Custom validation tab in CF7 editor with global settings support
-Version: 1.2.0
+Version: 1.3.0
 Author: Alex Kovalev
 Author URI: https://webchad.tech
 License: GPL v2 or later
@@ -52,6 +52,9 @@ class CF7_Field_Validator
         // Enqueue admin scripts
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_scripts']);
 
+        // Validate matching fields before a CF7 form is submitted.
+        add_action('wp_enqueue_scripts', [$this, 'enqueue_frontend_scripts']);
+
         // Migrate installations that update the plugin without reactivating it.
         add_action('admin_init', [$this, 'maybe_migrate_legacy_rules']);
     }
@@ -77,10 +80,48 @@ class CF7_Field_Validator
                 'cf7-validator-admin',
                 plugin_dir_url(__FILE__) . 'assets/cf7-validator-admin.js',
                 ['jquery'],
-                '1.1.0',
+                '1.3.0',
                 true
             );
         }
+    }
+
+    /**
+     * Enqueue visitor-side validation. PHP validation remains authoritative.
+     */
+    public function enqueue_frontend_scripts()
+    {
+        if (is_admin()) {
+            return;
+        }
+
+        wp_enqueue_script(
+            'cf7-validator-frontend',
+            plugin_dir_url(__FILE__) . 'assets/cf7-validator-frontend.js',
+            [],
+            '1.3.0',
+            true
+        );
+
+        $form_rules = [];
+        $form_ids = get_posts([
+            'post_type' => 'wpcf7_contact_form',
+            'posts_per_page' => -1,
+            'fields' => 'ids',
+        ]);
+
+        foreach ($form_ids as $form_id) {
+            $rules = $this->get_rules_for_form($form_id);
+            if (!empty($rules)) {
+                $form_rules[$form_id] = $rules;
+            }
+        }
+
+        wp_add_inline_script(
+            'cf7-validator-frontend',
+            'window.CF7FieldValidatorRules = ' . wp_json_encode($form_rules) . ';',
+            'before'
+        );
     }
     
     /**
@@ -142,7 +183,7 @@ class CF7_Field_Validator
                     ?>
                 </tbody>
             </table>
-            <p class="description">For multiple values, use a comma-separated list (e.g., "red,green,blue"). For Custom Regex, enter a complete PCRE pattern such as <code>/^[A-Z]{3}$/</code>.</p>
+            <p class="description">For Equals and Contains, use a comma-separated list (e.g., "red,green,blue"). Length rules require a non-negative whole number, number rules require a number, and Custom Regex must be valid in both PCRE and JavaScript (e.g., <code>/^[A-Z]{3}$/</code>).</p>
             <button type="button" class="button" id="add-rule">Add New Rule</button>
         </fieldset>
     <?php
@@ -213,16 +254,9 @@ class CF7_Field_Validator
         if (isset($_POST['validator_rules'])) {
             $sanitized_rules = array();
             foreach ($_POST['validator_rules'] as $rule) {
-                if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
-                    $sanitized_rules[] = array(
-                        'field' => sanitize_text_field($rule['field']),
-                        'operator' => in_array($rule['operator'], ['equals', 'contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals', 'custom_regex'], true)
-                            ? $rule['operator']
-                            : 'equals',
-                        'negate' => isset($rule['negate']) && $rule['negate'] === 'yes',
-                        'value' => $this->sanitize_rule_value($rule['value'], $rule['operator']),
-                        'message' => sanitize_text_field($rule['message'] ?? '')
-                    );
+                $sanitized_rule = $this->sanitize_rule($rule);
+                if ($sanitized_rule !== null) {
+                    $sanitized_rules[] = $sanitized_rule;
                 }
             }
             update_post_meta($contact_form->id(), 'validator_rules', $sanitized_rules);
@@ -242,25 +276,14 @@ class CF7_Field_Validator
         if (!$submission) return $result;
 
         $form = $submission->get_contact_form();
-        $form_rules = get_post_meta($form->id(), 'validator_rules', true) ?: [];
-        
-        // Check if global rules should be applied
-        $use_global_rules = get_post_meta($form->id(), 'use_global_validator_rules', true);
-        $global_rules = [];
-        
-        if ($use_global_rules !== 'no') {
-            $global_rules = get_option($this->option_name, []);
-        }
-        
-        // Combine form-specific and global rules
-        $all_rules = array_merge($global_rules, $form_rules);
+        $all_rules = $this->get_rules_for_form($form->id());
         
         if (empty($all_rules)) return $result;
 
         $posted_data = $submission->get_posted_data();
 
         foreach ($all_rules as $rule) {
-            $field = $rule['field'];
+            $field = $rule['field'] ?? '';
             if (isset($posted_data[$field])) {
                 $posted_value = $posted_data[$field];
 
@@ -385,16 +408,9 @@ class CF7_Field_Validator
 
         $sanitized = [];
         foreach ($input as $rule) {
-            if (!empty($rule['field']) && isset($rule['value']) && $rule['value'] !== '') {
-                $sanitized[] = [
-                    'field' => sanitize_text_field($rule['field']),
-                    'operator' => in_array($rule['operator'], ['equals', 'contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals', 'custom_regex'], true)
-                        ? $rule['operator']
-                        : 'equals',
-                    'negate' => isset($rule['negate']) && $rule['negate'] === 'yes',
-                    'value' => $this->sanitize_rule_value($rule['value'], $rule['operator']),
-                    'message' => sanitize_text_field($rule['message'] ?? '')
-                ];
+            $sanitized_rule = $this->sanitize_rule($rule);
+            if ($sanitized_rule !== null) {
+                $sanitized[] = $sanitized_rule;
             }
         }
 
@@ -411,6 +427,83 @@ class CF7_Field_Validator
         }
 
         return sanitize_text_field($value);
+    }
+
+    /**
+     * Validate and normalize a rule submitted from either settings screen.
+     */
+    private function sanitize_rule($rule)
+    {
+        if (!is_array($rule) || !isset($rule['field'], $rule['value']) || !is_string($rule['field']) || !is_string($rule['value']) || $rule['field'] === '' || $rule['value'] === '') {
+            return null;
+        }
+
+        $field = sanitize_text_field($rule['field']);
+        if (strpos($field, '[') !== false || strpos($field, ']') !== false) {
+            return null;
+        }
+
+        $operator = $rule['operator'] ?? 'equals';
+        $negate = isset($rule['negate']) && ($rule['negate'] === 'yes' || $rule['negate'] === true);
+
+        // Support legacy imports as well as already-saved legacy rules.
+        if ($operator === 'not_equals') {
+            $operator = 'equals';
+            $negate = true;
+        } elseif ($operator === 'not_contains') {
+            $operator = 'contains';
+            $negate = true;
+        }
+
+        $allowed_operators = ['equals', 'contains', 'length_more_than', 'length_less_than', 'length_is', 'number_less_than', 'number_more_than', 'number_equals', 'custom_regex'];
+        if (!in_array($operator, $allowed_operators, true)) {
+            return null;
+        }
+
+        $value = $this->sanitize_rule_value($rule['value'], $operator);
+        if (!$this->is_valid_rule_value($value, $operator)) {
+            return null;
+        }
+
+        return [
+            'field' => $field,
+            'operator' => $operator,
+            'negate' => $negate,
+            'value' => $value,
+            'message' => sanitize_text_field($rule['message'] ?? '')
+        ];
+    }
+
+    /**
+     * Ensure a rule value is meaningful for its selected operator.
+     */
+    private function is_valid_rule_value($value, $operator)
+    {
+        if (in_array($operator, ['length_more_than', 'length_less_than', 'length_is'], true)) {
+            return preg_match('/^\d+$/', $value) === 1;
+        }
+
+        if (in_array($operator, ['number_less_than', 'number_more_than', 'number_equals'], true)) {
+            return is_numeric($value);
+        }
+
+        if ($operator === 'custom_regex') {
+            return @preg_match($value, '') !== false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Return the enabled global and form-specific rules for a contact form.
+     */
+    private function get_rules_for_form($form_id)
+    {
+        $form_rules = get_post_meta($form_id, 'validator_rules', true) ?: [];
+        $use_global_rules = get_post_meta($form_id, 'use_global_validator_rules', true);
+        $global_rules = $use_global_rules !== 'no' ? get_option($this->option_name, []) : [];
+
+        return array_merge($global_rules, $form_rules);
     }
 
     /**
@@ -652,7 +745,7 @@ class CF7_Field_Validator
                             ?>
                         </tbody>
                     </table>
-                    <p class="description">For multiple values, use a comma-separated list (e.g., "red,green,blue"). For Custom Regex, enter a complete PCRE pattern such as <code>/^[A-Z]{3}$/</code>.</p>
+                    <p class="description">For Equals and Contains, use a comma-separated list (e.g., "red,green,blue"). Length rules require a non-negative whole number, number rules require a number, and Custom Regex must be valid in both PCRE and JavaScript (e.g., <code>/^[A-Z]{3}$/</code>).</p>
             <button type="button" class="button" id="add-global-rule">Add New Rule</button>
                 </fieldset>
 
